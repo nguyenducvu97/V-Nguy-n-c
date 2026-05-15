@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Activity, Users, DollarSign, BarChart3, Loader2 } from "lucide-react";
+import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Activity, Users, DollarSign, BarChart3, Loader2, RefreshCw } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getMarketSentiment } from "@/lib/gemini";
 import { fetchMarketIndexes, fetchTopStocks, MarketIndex, formatNumber, formatCurrency } from "@/services/marketService";
@@ -22,9 +22,12 @@ export function Dashboard() {
   const [topStocks, setTopStocks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [marketLoading, setMarketLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<string>("");
+  const [history, setHistory] = useState(chartData);
 
   const refreshMarketData = async () => {
+    setIsRefreshing(true);
     try {
       const [idxData, stockData] = await Promise.all([
         fetchMarketIndexes(),
@@ -33,10 +36,26 @@ export function Dashboard() {
       setIndexes(idxData);
       setTopStocks(stockData);
       setLastUpdated(new Date().toLocaleTimeString('vi-VN'));
+
+      // Update history chart for VNINDEX
+      const vnIndex = idxData.find(idx => idx.symbol === "VNINDEX");
+      if (vnIndex) {
+        setHistory(prev => {
+          const newPoint = { time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }), value: vnIndex.value };
+          // If the last point is the same time, replace it, otherwise add new
+          const lastPoint = prev[prev.length - 1];
+          if (lastPoint && lastPoint.time === newPoint.time) {
+            return [...prev.slice(0, -1), newPoint];
+          }
+          const nextHistory = [...prev, newPoint];
+          return nextHistory.slice(-20); // Keep last 20 points
+        });
+      }
     } catch (err) {
       console.error("Refresh Market Data Error:", err);
     } finally {
       setMarketLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -55,8 +74,28 @@ export function Dashboard() {
     fetchSentiment();
     refreshMarketData();
 
-    // Polling every 15 seconds for market data
-    const interval = setInterval(refreshMarketData, 15000);
+    // Subscribe to symbols via WebSocket for real-time updates
+    const symbolsToWatch = ["VNINDEX", "VN30", "HNX", "UPCOM", "HNX30", "VS100", "VSL-CAP", "VSM-CAP", "VSS-CAP", "VN30F1M", "FPT", "MWG", "TCB", "VCB", "DGC", "PVS", "GMD", "VNM"];
+    import("@/services/marketService").then(({ marketStream }) => {
+      marketStream.subscribe(symbolsToWatch, (quote) => {
+        // Incrementally update state if we get a websocket push
+        const indexSymbols = ["VNINDEX", "VN30", "HNX", "UPCOM", "HNX30", "VS100", "VSL-CAP", "VSM-CAP", "VSS-CAP", "VN30F1M"];
+        if (indexSymbols.includes(quote.symbol)) {
+          setIndexes(prev => prev.map(idx => idx.symbol === quote.symbol ? {
+            ...idx,
+            value: quote.price,
+            change: quote.change,
+            changePercent: quote.changePercent,
+            updatedAt: quote.updatedAt
+          } : idx));
+        } else {
+          setTopStocks(prev => prev.map(s => s.symbol === quote.symbol ? quote : s));
+        }
+      });
+    });
+
+    // Polling every 20 seconds for market data as a reliable fallback
+    const interval = setInterval(refreshMarketData, 20000);
     return () => clearInterval(interval);
   }, []);
 
@@ -65,33 +104,53 @@ export function Dashboard() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Dữ liệu trực tuyến - {lastUpdated || "Đang kết nối..."}</span>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+            Dữ liệu trực tuyến - {lastUpdated || "Đang kết nối..."}
+            {isRefreshing && <RefreshCw className="w-3 h-3 animate-spin text-blue-500" />}
+          </span>
         </div>
       </div>
 
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {marketLoading && indexes.length === 0 ? [1,2,3,4].map(i => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
+        {marketLoading && indexes.length === 0 ? [1,2,3,4,5,6,7,8].map(i => (
           <Card key={i} className="bg-slate-900 border-slate-800 h-32 animate-pulse" />
         )) : (
           (() => {
             const vnIndex = indexes.find(idx => idx.symbol === "VNINDEX");
             const liquidity = vnIndex?.totalValue ? { 
               symbol: "Thanh khoản", 
-              value: vnIndex.totalValue / 1e9, // Billion VND
+              value: vnIndex.totalValue > 1000000 ? vnIndex.totalValue / 1e9 : vnIndex.totalValue,
               change: 0, 
               changePercent: "Tỷ đồng" 
-            } : { symbol: "Thanh khoản", value: 22500, change: 0, changePercent: "Tỷ đồng" };
+            } : null;
 
-            return [...indexes, liquidity as any].map((item, i) => {
+            const displayIndexes = liquidity ? [...indexes, liquidity as any] : indexes;
+
+            return displayIndexes.map((item, i) => {
               const isUp = item.change >= 0;
               const isLiquidity = item.symbol === "Thanh khoản";
+              
+              // Map display names to match screenshot
+              const displayInfo = {
+                "VNINDEX": { name: "VN-Index" },
+                "HNX": { name: "HNX-Index" },
+                "UPCOM": { name: "UPCoM-Index" },
+                "VN30": { name: "VN30" },
+                "HNX30": { name: "HNX30" },
+                "VS100": { name: "VS 100" },
+                "VSL-CAP": { name: "VS-Large Cap" },
+                "VSM-CAP": { name: "VS-Mid Cap" },
+                "VSS-CAP": { name: "VS-Small Cap" },
+                "VN30F1M": { name: "VN30F1M" }
+              }[item.symbol] || { name: item.symbol };
+
               return (
                 <Card key={i} className="bg-slate-900 border-slate-800 hover:border-slate-700 transition-all group relative overflow-hidden">
                   <CardContent className="p-5">
                     <div className="flex justify-between items-start mb-2">
-                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">{item.symbol}</span>
+                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">{displayInfo.name}</span>
                       <div className={`p-1.5 rounded-lg ${isUp ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                        {isUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                        {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                       </div>
                     </div>
                     <div className="flex items-baseline gap-2">
@@ -111,7 +170,7 @@ export function Dashboard() {
 
                     <div className="mt-3 h-[30px] w-full">
                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={chartData}>
+                          <AreaChart data={history}>
                             <Area 
                               type="monotone" 
                               dataKey="value" 
@@ -146,7 +205,7 @@ export function Dashboard() {
           <CardContent>
             <div className="h-[300px] w-full mt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData}>
+                <AreaChart data={history}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
