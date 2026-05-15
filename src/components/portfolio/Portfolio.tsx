@@ -1,18 +1,58 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PieChart, Wallet, TrendingUp, ArrowUpRight, Plus, History } from "lucide-react";
+import { PieChart, Wallet, TrendingUp, ArrowUpRight, Plus, History, RefreshCw } from "lucide-react";
 import { Cell, Pie, PieChart as RechartsPieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { fetchMultipleStockQuotes, formatCurrency } from "@/services/marketService";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function Portfolio() {
-  const holdings = [
-    { symbol: "FPT", quantity: 500, avgPrice: 112.5, currentPrice: 135.2, profit: "+20.1%", value: 67600, color: "#3b82f6" },
-    { symbol: "TCB", quantity: 2000, avgPrice: 42.1, currentPrice: 48.9, profit: "+16.1%", value: 97800, color: "#ef4444" },
-    { symbol: "MWG", quantity: 300, avgPrice: 58.2, currentPrice: 64.5, profit: "+10.8%", value: 19350, color: "#eab308" },
-    { symbol: "DGC", quantity: 200, avgPrice: 115.0, currentPrice: 125.4, profit: "+9.0%", value: 25080, color: "#10b981" },
+  const [loading, setLoading] = useState(true);
+  const [holdings, setHoldings] = useState<any[]>([]);
+
+  const baseHoldings = [
+    { symbol: "FPT", quantity: 500, avgPrice: 112.5, color: "#3b82f6" },
+    { symbol: "TCB", quantity: 2000, avgPrice: 42.1, color: "#ef4444" },
+    { symbol: "MWG", quantity: 300, avgPrice: 58.2, color: "#eab308" },
+    { symbol: "DGC", quantity: 200, avgPrice: 115.0, color: "#10b981" },
   ];
+
+  const refreshPortfolio = async () => {
+    setLoading(true);
+    try {
+      const symbols = baseHoldings.map(h => h.symbol);
+      const quotes = await fetchMultipleStockQuotes(symbols);
+      
+      const liveData = baseHoldings.map(h => {
+        const quote = quotes.find(q => q.symbol === h.symbol);
+        const currentPrice = quote?.price || h.avgPrice;
+        const value = h.quantity * currentPrice;
+        const profit = ((currentPrice - h.avgPrice) / h.avgPrice) * 100;
+        return {
+          ...h,
+          currentPrice,
+          value,
+          profit: `${profit > 0 ? "+" : ""}${profit.toFixed(1)}%`
+        };
+      });
+      setHoldings(liveData);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshPortfolio();
+  }, []);
+
+  const totalValue = holdings.reduce((sum, h) => sum + h.value, 0);
+  const totalCost = baseHoldings.reduce((sum, h) => sum + (h.quantity * h.avgPrice), 0);
+  const totalProfit = totalValue - totalCost;
+  const totalProfitPercent = (totalProfit / totalCost) * 100;
 
   const pieData = holdings.map(h => ({ name: h.symbol, value: h.value, color: h.color }));
 
@@ -22,13 +62,13 @@ export function Portfolio() {
          <div>
             <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
               <Wallet className="w-6 h-6 text-blue-500" />
-              Sổ tay Đầu tư
+              Sổ tay Đầu tư (Live)
             </h2>
             <p className="text-slate-500 text-sm">Quản trị danh mục và theo dõi hiệu suất đầu tư bằng AI.</p>
          </div>
          <div className="flex gap-2">
-            <Button variant="outline" className="bg-slate-900 border-slate-700 text-slate-300 rounded-xl">
-               <History className="w-4 h-4 mr-2" /> Lịch sử
+            <Button variant="outline" className="bg-slate-900 border-slate-700 text-slate-300 rounded-xl" onClick={refreshPortfolio}>
+               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Làm mới
             </Button>
             <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl">
                <Plus className="w-4 h-4 mr-2" /> Thêm giao dịch
@@ -43,7 +83,7 @@ export function Portfolio() {
                  <div>
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Tổng giá trị tài sản</span>
                     <div className="flex items-baseline gap-3 mt-1">
-                       <h3 className="text-4xl font-black text-slate-100">209.83M</h3>
+                       <h3 className="text-4xl font-black text-slate-100">{(totalValue / 1000).toFixed(2)}M</h3>
                        <span className="text-xs text-slate-500">VND</span>
                     </div>
                  </div>
@@ -51,13 +91,13 @@ export function Portfolio() {
                  <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 rounded-3xl bg-green-500/10 border border-green-500/20">
                        <p className="text-[10px] font-bold text-green-500 uppercase tracking-widest mb-1">Lãi/Lỗ tạm tính</p>
-                       <p className="text-xl font-bold text-slate-100">+31.25M</p>
-                       <p className="text-xs text-green-500 font-medium">+17.5%</p>
+                       <p className="text-xl font-bold text-slate-100">{(totalProfit / 1000).toFixed(2)}M</p>
+                       <p className="text-xs font-medium text-green-500">{totalProfitPercent > 0 ? "+" : ""}{totalProfitPercent.toFixed(1)}%</p>
                     </div>
                     <div className="p-4 rounded-3xl bg-blue-500/10 border border-blue-500/20">
                        <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Tiền mặt</p>
                        <p className="text-xl font-bold text-slate-100">45.0M</p>
-                       <p className="text-xs text-slate-500">21.4% Tỷ trọng</p>
+                       <p className="text-xs text-slate-500">{(45000 / (totalValue + 45000) * 100).toFixed(1)}% Tỷ trọng</p>
                     </div>
                  </div>
               </div>
@@ -129,21 +169,31 @@ export function Portfolio() {
                </TableRow>
             </TableHeader>
             <TableBody>
-               {holdings.map((h) => (
-                  <TableRow key={h.symbol} className="border-slate-800 hover:bg-slate-800/30 transition-all">
-                     <TableCell className="py-5 pl-8 font-bold text-slate-100">{h.symbol}</TableCell>
-                     <TableCell className="text-slate-300">{h.quantity.toLocaleString()}</TableCell>
-                     <TableCell>
-                        <span className="text-slate-500 text-xs">{h.avgPrice}</span>
-                        <span className="text-slate-400 mx-2">→</span>
-                        <span className="text-slate-100 font-bold">{h.currentPrice}</span>
-                     </TableCell>
-                     <TableCell className="text-slate-200 font-medium">{h.value.toLocaleString()}</TableCell>
-                     <TableCell className="pr-8 text-right">
-                        <Badge className="bg-green-500/20 text-green-400 border-none rounded-lg">{h.profit}</Badge>
-                     </TableCell>
-                  </TableRow>
-               ))}
+               {loading && holdings.length === 0 ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={i} className="border-slate-800">
+                      <TableCell colSpan={5} className="p-4 pl-8">
+                        <Skeleton className="h-10 w-full bg-slate-800" />
+                      </TableCell>
+                    </TableRow>
+                  ))
+               ) : (
+                 holdings.map((h) => (
+                    <TableRow key={h.symbol} className="border-slate-800 hover:bg-slate-800/30 transition-all">
+                       <TableCell className="py-5 pl-8 font-bold text-slate-100">{h.symbol}</TableCell>
+                       <TableCell className="text-slate-300">{h.quantity.toLocaleString()}</TableCell>
+                       <TableCell>
+                          <span className="text-slate-500 text-xs">{formatCurrency(h.avgPrice)}</span>
+                          <span className="text-slate-400 mx-2">→</span>
+                          <span className="text-slate-100 font-bold">{formatCurrency(h.currentPrice)}</span>
+                       </TableCell>
+                       <TableCell className="text-slate-200 font-medium">{formatCurrency(h.value)}</TableCell>
+                       <TableCell className="pr-8 text-right">
+                          <Badge className={`${parseFloat(h.profit) >= 0 ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"} border-none rounded-lg`}>{h.profit}</Badge>
+                       </TableCell>
+                    </TableRow>
+                 ))
+               )}
             </TableBody>
          </Table>
       </Card>

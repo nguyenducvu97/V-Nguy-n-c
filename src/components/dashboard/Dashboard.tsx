@@ -4,8 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { TrendingUp, TrendingDown, ArrowUpRight, ArrowDownRight, Activity, Users, DollarSign, BarChart3, Loader2 } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getMarketSentiment } from "@/lib/gemini";
+import { fetchMarketIndexes, fetchTopStocks, MarketIndex, formatNumber, formatCurrency } from "@/services/marketService";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const data = [
+const chartData = [
   { time: "09:00", value: 1240 },
   { time: "10:00", value: 1255 },
   { time: "11:00", value: 1248 },
@@ -16,7 +18,27 @@ const data = [
 
 export function Dashboard() {
   const [sentiment, setSentiment] = useState<{ index: number; sentiment: string; news: string[] } | null>(null);
+  const [indexes, setIndexes] = useState<MarketIndex[]>([]);
+  const [topStocks, setTopStocks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [marketLoading, setMarketLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<string>("");
+
+  const refreshMarketData = async () => {
+    try {
+      const [idxData, stockData] = await Promise.all([
+        fetchMarketIndexes(),
+        fetchTopStocks()
+      ]);
+      setIndexes(idxData);
+      setTopStocks(stockData);
+      setLastUpdated(new Date().toLocaleTimeString('vi-VN'));
+    } catch (err) {
+      console.error("Refresh Market Data Error:", err);
+    } finally {
+      setMarketLoading(false);
+    }
+  };
 
   useEffect(() => {
     async function fetchSentiment() {
@@ -29,48 +51,83 @@ export function Dashboard() {
         setLoading(false);
       }
     }
+    
     fetchSentiment();
+    refreshMarketData();
+
+    // Polling every 15 seconds for market data
+    const interval = setInterval(refreshMarketData, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: "VN-INDEX", value: "1,280.52", change: "+12.45", pc: "+0.98%", up: true },
-          { label: "HNX-INDEX", value: "242.15", change: "-1.20", pc: "-0.49%", up: false },
-          { label: "UPCOM", value: "92.30", change: "+0.15", pc: "+0.16%", up: true },
-          { label: "Dòng tiền", value: "22.5T", change: "+4.2T", pc: "Tỷ đồng", up: true },
-        ].map((item, i) => (
-          <Card key={i} className="bg-slate-900 border-slate-800 hover:border-slate-700 transition-all group">
-            <CardContent className="p-5">
-              <div className="flex justify-between items-start mb-2">
-                <span className="text-slate-400 text-xs font-medium uppercase tracking-wider">{item.label}</span>
-                <div className={`p-1.5 rounded-lg ${item.up ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                  {item.up ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
-                </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <h3 className="text-2xl font-bold tracking-tight text-slate-100">{item.value}</h3>
-                <span className={`text-xs font-medium ${item.up ? 'text-green-500' : 'text-red-500'}`}>
-                  {item.pc}
-                </span>
-              </div>
-              <div className="mt-4 h-[40px] w-full">
-                 <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data}>
-                      <Area 
-                        type="monotone" 
-                        dataKey="value" 
-                        stroke={item.up ? "#10b981" : "#ef4444"} 
-                        fill={item.up ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)"} 
-                        strokeWidth={2}
-                      />
-                    </AreaChart>
-                 </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Dữ liệu trực tuyến - {lastUpdated || "Đang kết nối..."}</span>
+        </div>
+      </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {marketLoading && indexes.length === 0 ? [1,2,3,4].map(i => (
+          <Card key={i} className="bg-slate-900 border-slate-800 h-32 animate-pulse" />
+        )) : (
+          (() => {
+            const vnIndex = indexes.find(idx => idx.symbol === "VNINDEX");
+            const liquidity = vnIndex?.totalValue ? { 
+              symbol: "Thanh khoản", 
+              value: vnIndex.totalValue / 1e9, // Billion VND
+              change: 0, 
+              changePercent: "Tỷ đồng" 
+            } : { symbol: "Thanh khoản", value: 22500, change: 0, changePercent: "Tỷ đồng" };
+
+            return [...indexes, liquidity as any].map((item, i) => {
+              const isUp = item.change >= 0;
+              const isLiquidity = item.symbol === "Thanh khoản";
+              return (
+                <Card key={i} className="bg-slate-900 border-slate-800 hover:border-slate-700 transition-all group relative overflow-hidden">
+                  <CardContent className="p-5">
+                    <div className="flex justify-between items-start mb-2">
+                      <span className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">{item.symbol}</span>
+                      <div className={`p-1.5 rounded-lg ${isUp ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                        {isUp ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                      </div>
+                    </div>
+                    <div className="flex items-baseline gap-2">
+                      <h3 className="text-2xl font-bold tracking-tight text-slate-100">
+                        {isLiquidity ? `${formatNumber(Math.round(item.value))}T` : formatNumber(item.value)}
+                      </h3>
+                      <span className={`text-[10px] font-bold ${isUp || isLiquidity ? 'text-green-500' : 'text-red-500'}`}>
+                        {item.changePercent}
+                      </span>
+                    </div>
+                    
+                    {item.updatedAt && (
+                      <div className="mt-1">
+                        <span className="text-[8px] text-slate-600 font-medium">🕒 {item.updatedAt}</span>
+                      </div>
+                    )}
+
+                    <div className="mt-3 h-[30px] w-full">
+                       <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={chartData}>
+                            <Area 
+                              type="monotone" 
+                              dataKey="value" 
+                              stroke={isUp ? "#10b981" : "#ef4444"} 
+                              fill={isUp ? "rgba(16, 185, 129, 0.1)" : "rgba(239, 68, 68, 0.1)"} 
+                              strokeWidth={1.5}
+                            />
+                          </AreaChart>
+                       </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            });
+          })()
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -89,7 +146,7 @@ export function Dashboard() {
           <CardContent>
             <div className="h-[300px] w-full mt-4">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data}>
+                <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -147,7 +204,7 @@ export function Dashboard() {
                     <div className="h-12 w-full bg-slate-800 animate-pulse rounded-xl" />
                   </div>
                 ) : (
-                  sentiment?.news.map((news, i) => (
+                  sentiment?.news.map((news: string, i: number) => (
                     <div key={i} className="p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-xs text-slate-300 leading-relaxed hover:bg-slate-800 transition-colors cursor-default">
                       {news}
                     </div>
@@ -165,29 +222,29 @@ export function Dashboard() {
               <CardTitle className="text-lg font-semibold text-slate-100">Top cổ phiếu dẫn dắt</CardTitle>
            </CardHeader>
            <CardContent>
-              <div className="space-y-4">
-                {[
-                  { symbol: "FPT", name: "FPT Corporation", price: "135.2", change: "+3.2%", status: "Leader" },
-                  { symbol: "MWG", name: "Thế giới Di động", price: "64.5", change: "+2.8%", status: "Accumulating" },
-                  { symbol: "TCB", name: "Techcombank", price: "48.9", change: "+1.9%", status: "High Liquidity" },
-                  { symbol: "VCB", name: "Vietcombank", price: "92.4", change: "+0.5%", status: "Bluechip" },
-                ].map((stock, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-2xl hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-800 group">
-                    <div className="flex items-center gap-3">
-                       <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center font-bold text-slate-300 group-hover:bg-blue-600/20 group-hover:text-blue-400 transition-all">
-                          {stock.symbol[0]}
-                       </div>
-                       <div>
-                          <p className="font-bold text-slate-200">{stock.symbol}</p>
-                          <p className="text-[10px] text-slate-500 uppercase tracking-tight">{stock.name}</p>
-                       </div>
+              <div className="space-y-2">
+                {marketLoading && topStocks.length === 0 ? [1,2,3,4].map(i => (
+                  <Skeleton key={i} className="h-16 w-full rounded-xl bg-slate-800" />
+                )) : topStocks.map((stock, i) => {
+                  const isUp = parseFloat(stock.changePercent) >= 0;
+                  return (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-2xl hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-800 group">
+                      <div className="flex items-center gap-3">
+                         <div className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center font-bold text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                            {stock.symbol[0]}
+                         </div>
+                         <div>
+                            <p className="font-bold text-slate-200">{stock.symbol}</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-tight">Real-time Quote</p>
+                         </div>
+                      </div>
+                      <div className="text-right">
+                         <p className="font-bold text-slate-200">{formatCurrency(stock.price)}</p>
+                         <p className={`text-xs font-medium ${isUp ? 'text-green-500' : 'text-red-500'}`}>{stock.changePercent}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                       <p className="font-bold text-slate-200">{stock.price}</p>
-                       <p className="text-xs text-green-500 font-medium">{stock.change}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
            </CardContent>
         </Card>
@@ -201,7 +258,7 @@ export function Dashboard() {
                  <div className="p-4 rounded-2xl bg-blue-600/10 border border-blue-500/20">
                     <div className="flex items-center gap-2 text-blue-400 mb-2">
                        <DollarSign className="w-4 h-4" />
-                       <span className="text-sm font-bold">Khối ngoại</span>
+                       <span className="text-sm font-bold">Khối ngoại (Ước tính)</span>
                     </div>
                     <div className="flex justify-between items-end">
                        <div>
@@ -215,7 +272,7 @@ export function Dashboard() {
                  <div className="p-4 rounded-2xl bg-purple-600/10 border border-purple-500/20">
                     <div className="flex items-center gap-2 text-purple-400 mb-2">
                        <Activity className="w-4 h-4" />
-                       <span className="text-sm font-bold">Tự doanh</span>
+                       <span className="text-sm font-bold">Tự doanh (Ước tính)</span>
                     </div>
                     <div className="flex justify-between items-end">
                        <div>
@@ -232,3 +289,4 @@ export function Dashboard() {
     </div>
   );
 }
+

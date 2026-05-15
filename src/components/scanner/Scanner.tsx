@@ -1,23 +1,50 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Filter, Search, ArrowUpRight, Zap, ListFilter } from "lucide-react";
+import { Filter, Search, ArrowUpRight, Zap, RefreshCw } from "lucide-react";
+import { fetchMultipleStockQuotes, formatCurrency } from "@/services/marketService";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function Scanner() {
-  const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [stocks, setStocks] = useState<any[]>([]);
 
-  const stocks = [
-    { symbol: "FPT", name: "FPT Corporation", category: "Công nghệ", currentPrice: 135.2, change: "+3.2%", rsi: 65, Signal: "Breakout", score: 88 },
-    { symbol: "MWG", name: "Thế giới Di động", category: "Bán lẻ", currentPrice: 64.5, change: "+2.8%", rsi: 58, Signal: "Dòng tiền vào", score: 82 },
-    { symbol: "TCB", name: "Techcombank", category: "Ngân hàng", currentPrice: 48.9, change: "+1.9%", rsi: 55, Signal: "Tích lũy", score: 75 },
-    { symbol: "DGC", name: "Hóa chất Đức Giang", category: "Hóa chất", currentPrice: 125.4, change: "+4.5%", rsi: 72, Signal: "Siêu cổ phiếu", score: 92 },
-    { symbol: "PVS", name: "Dịch vụ Dầu khí", category: "Dầu khí", currentPrice: 42.1, change: "+1.2%", rsi: 60, Signal: "Hồi phục", score: 78 },
-    { symbol: "GMD", name: "Gemadept", category: "Cảng biển", currentPrice: 82.5, change: "+3.8%", rsi: 68, Signal: "Vượt đỉnh", score: 85 },
-    { symbol: "VHC", name: "Vĩnh Hoàn", category: "Thủy sản", currentPrice: 76.2, change: "-0.5%", rsi: 48, Signal: "Cạn cung", score: 70 },
+  const defaultStocks = [
+    { symbol: "FPT", name: "FPT Corporation", category: "Công nghệ", Signal: "Breakout", score: 88, rsi: 65 },
+    { symbol: "MWG", name: "Thế giới Di động", category: "Bán lẻ", Signal: "Dòng tiền vào", score: 82, rsi: 58 },
+    { symbol: "TCB", name: "Techcombank", category: "Ngân hàng", Signal: "Tích lũy", score: 75, rsi: 55 },
+    { symbol: "DGC", name: "Hóa chất Đức Giang", category: "Hóa chất", Signal: "Siêu cổ phiếu", score: 92, rsi: 72 },
+    { symbol: "PVS", name: "Dịch vụ Dầu khí", category: "Dầu khí", Signal: "Hồi phục", score: 78, rsi: 60 },
+    { symbol: "GMD", name: "Gemadept", category: "Cảng biển", Signal: "Vượt đỉnh", score: 85, rsi: 68 },
+    { symbol: "VHC", name: "Vĩnh Hoàn", category: "Thủy sản", Signal: "Cạn cung", score: 70, rsi: 48 },
   ];
+
+  const refreshScanner = async () => {
+    setLoading(true);
+    try {
+      const symbols = defaultStocks.map(s => s.symbol);
+      const quotes = await fetchMultipleStockQuotes(symbols);
+      
+      const liveData = defaultStocks.map(s => {
+        const quote = quotes.find(q => q.symbol === s.symbol);
+        return { ...s, ...quote };
+      });
+      setStocks(liveData);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refreshScanner();
+    const interval = setInterval(refreshScanner, 30000); // Polling 30s for scanner
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -25,13 +52,13 @@ export function Scanner() {
         <div>
           <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
             <Zap className="w-6 h-6 text-yellow-500" />
-            AI Scanner
+            AI Scanner (Real-time)
           </h2>
           <p className="text-slate-500 text-sm">Quét toàn bộ thị trường tìm cổ phiếu có tín hiệu kỹ thuật & dòng tiền mạnh nhất.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="bg-slate-900 border-slate-700 text-slate-300 rounded-xl">
-             <Filter className="w-4 h-4 mr-2" /> Bộ lọc
+          <Button variant="outline" className="bg-slate-900 border-slate-700 text-slate-300 rounded-xl" onClick={refreshScanner}>
+             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} /> Làm mới
           </Button>
           <Button className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl">
              <Zap className="w-4 h-4 mr-2" /> Chạy quét AI
@@ -71,47 +98,59 @@ export function Scanner() {
                </TableRow>
              </TableHeader>
              <TableBody>
-               {stocks.map((stock) => (
-                 <TableRow key={stock.symbol} className="border-slate-800 hover:bg-slate-800/30 transition-all group">
-                   <TableCell className="py-4 pl-6">
-                      <div className="flex items-center gap-3">
-                         <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                            {stock.symbol[0]}
-                         </div>
-                         <div>
-                            <p className="font-bold text-slate-200">{stock.symbol}</p>
-                            <p className="text-[10px] text-slate-500">{stock.name}</p>
-                         </div>
-                      </div>
-                   </TableCell>
-                   <TableCell>
-                      <p className="font-bold text-slate-200">{stock.currentPrice}</p>
-                      <p className={`text-[10px] font-bold ${stock.change.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>{stock.change}</p>
-                   </TableCell>
-                   <TableCell className="text-slate-400 text-sm font-medium">{stock.category}</TableCell>
-                   <TableCell>
-                      <div className="flex items-center gap-2">
-                         <div className="flex-1 h-1.5 w-12 bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-500" style={{ width: `${stock.rsi}%` }} />
-                         </div>
-                         <span className="text-xs text-slate-400">{stock.rsi}</span>
-                      </div>
-                   </TableCell>
-                   <TableCell>
-                      <Badge className="bg-blue-500/10 text-blue-400 border-none rounded-lg text-[10px] px-2 py-0.5">
-                        {stock.Signal}
-                      </Badge>
-                   </TableCell>
-                   <TableCell className="text-center">
-                      <span className={`text-sm font-bold ${stock.score > 85 ? 'text-green-500' : 'text-blue-400'}`}>{stock.score}</span>
-                   </TableCell>
-                   <TableCell className="pr-6 text-right">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-blue-600/20 hover:text-blue-400 rounded-lg">
-                        <ArrowUpRight className="w-4 h-4" />
-                      </Button>
-                   </TableCell>
-                 </TableRow>
-               ))}
+               {loading && stocks.length === 0 ? (
+                 Array.from({ length: 7 }).map((_, i) => (
+                   <TableRow key={i} className="border-slate-800">
+                     <TableCell colSpan={7} className="p-4 pl-6">
+                       <Skeleton className="h-10 w-full bg-slate-800" />
+                     </TableCell>
+                   </TableRow>
+                 ))
+               ) : (
+                 stocks.map((stock) => (
+                   <TableRow key={stock.symbol} className="border-slate-800 hover:bg-slate-800/30 transition-all group">
+                     <TableCell className="py-4 pl-6">
+                        <div className="flex items-center gap-3">
+                           <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                              {stock.symbol[0]}
+                           </div>
+                           <div>
+                              <p className="font-bold text-slate-200">{stock.symbol}</p>
+                              <p className="text-[10px] text-slate-500">{stock.name}</p>
+                           </div>
+                        </div>
+                     </TableCell>
+                     <TableCell>
+                        <p className="font-bold text-slate-200">{stock.price ? formatCurrency(stock.price) : "--"}</p>
+                        <p className={`text-[10px] font-bold ${(stock.change || 0) >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {stock.changePercent || "0%"}
+                        </p>
+                     </TableCell>
+                     <TableCell className="text-slate-400 text-sm font-medium">{stock.category}</TableCell>
+                     <TableCell>
+                        <div className="flex items-center gap-2">
+                           <div className="flex-1 h-1.5 w-12 bg-slate-800 rounded-full overflow-hidden">
+                              <div className="h-full bg-blue-500" style={{ width: `${stock.rsi}%` }} />
+                           </div>
+                           <span className="text-xs text-slate-400">{stock.rsi}</span>
+                        </div>
+                     </TableCell>
+                     <TableCell>
+                        <Badge className="bg-blue-500/10 text-blue-400 border-none rounded-lg text-[10px] px-2 py-0.5">
+                          {stock.Signal}
+                        </Badge>
+                     </TableCell>
+                     <TableCell className="text-center">
+                        <span className={`text-sm font-bold ${stock.score > 85 ? 'text-green-500' : 'text-blue-400'}`}>{stock.score}</span>
+                     </TableCell>
+                     <TableCell className="pr-6 text-right">
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 hover:bg-blue-600/20 hover:text-blue-400 rounded-lg">
+                          <ArrowUpRight className="w-4 h-4" />
+                        </Button>
+                     </TableCell>
+                   </TableRow>
+                 ))
+               )}
              </TableBody>
            </Table>
         </CardContent>

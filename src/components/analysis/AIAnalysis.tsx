@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, Search, Target, ShieldAlert, Zap, TrendingUp, BarChart3, Info, BookOpen, Users } from "lucide-react";
 import { analyzeStock } from "@/lib/gemini";
+import { fetchStockQuote } from "@/services/marketService";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import ReactMarkdown from "react-markdown";
@@ -19,7 +20,10 @@ export function AIAnalysis() {
     if (!symbol) return;
     setLoading(true);
     try {
-      const result = await analyzeStock(symbol.toUpperCase());
+      // First, fetch the real-time quote for more accurate analysis
+      const quote = await fetchStockQuote(symbol);
+      
+      const result = await analyzeStock(symbol.toUpperCase(), quote);
       setAnalysis(result);
       toast.success(`Đã phân tích xong cổ phiếu ${symbol.toUpperCase()}`);
     } catch (error) {
