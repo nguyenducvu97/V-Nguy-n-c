@@ -1,0 +1,6 @@
+{
+  "name": "V-Ticker AI: Hệ thống Nghiên cứu Thị trường & Định hướng Đầu tư",
+  "description": "Nền tảng phân tích chứng khoán thông minh tích hợp AI, cung cấp phân tích kỹ thuật, cơ bản, dòng tiền và khuyến nghị đầu tư chuyên sâu.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["AI Analysis", "Real-time Dashboard", "Portfolio Tracking"]
+}

@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Watchlist": {
+      "title": "Watchlist",
+      "description": "User's list of tracked stocks",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "symbols": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["userId", "symbols"]
+    },
+    "Portfolio": {
+      "title": "Portfolio",
+      "description": "User's investment portfolio",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name"]
+    },
+    "PortfolioItem": {
+      "title": "Portfolio Item",
+      "description": "Stock position in a portfolio",
+      "type": "object",
+      "properties": {
+        "portfolioId": { "type": "string" },
+        "symbol": { "type": "string" },
+        "quantity": { "type": "number" },
+        "averagePrice": { "type": "number" }
+      },
+      "required": ["portfolioId", "symbol", "quantity", "averagePrice"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Collection of user profiles"
+    },
+    "watchlists": {
+      "schema": "Watchlist",
+      "description": "Collection of user watchlists"
+    },
+    "portfolios": {
+      "schema": "Portfolio",
+      "description": "Collection of user portfolios"
+    },
+    "portfolios/{portfolioId}/items": {
+      "schema": "PortfolioItem",
+      "description": "Subcollection of stock positions within a portfolio"
+    }
+  }
+}
