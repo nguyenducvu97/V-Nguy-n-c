@@ -81,7 +81,10 @@ export function Dashboard() {
 
     // Subscribe to symbols via WebSocket for real-time updates
     const symbolsToWatch = ["VNINDEX", "VN30", "HNX", "UPCOM", "HNX30", "VS100", "VSL-CAP", "VSM-CAP", "VSS-CAP", "VN30F1M", "FPT", "MWG", "TCB", "VCB", "DGC", "PVS", "GMD", "VNM"];
+    
+    let streamRef: any = null;
     import("@/services/marketService").then(({ marketStream }) => {
+      streamRef = marketStream;
       marketStream.subscribe(symbolsToWatch, (quote) => {
         // Incrementally update state if we get a websocket push
         const indexSymbols = ["VNINDEX", "VN30", "HNX", "UPCOM", "HNX30", "VS100", "VSL-CAP", "VSM-CAP", "VSS-CAP", "VN30F1M"];
@@ -99,9 +102,12 @@ export function Dashboard() {
       });
     });
 
-    // Polling every 20 seconds for market data as a reliable fallback
-    const interval = setInterval(refreshMarketData, 20000);
-    return () => clearInterval(interval);
+    // Polling every 10 seconds for market data as a reliable fallback for VN market
+    const interval = setInterval(refreshMarketData, 10000);
+    return () => {
+      clearInterval(interval);
+      if (streamRef) streamRef.unsubscribe();
+    };
   }, []);
 
   return (
@@ -137,9 +143,11 @@ export function Dashboard() {
               
               // Map display names to match screenshot
               const displayInfo = {
-                "VNINDEX": { name: "VN-Index" },
-                "HNX": { name: "HNX-Index" },
-                "UPCOM": { name: "UPCoM-Index" },
+                "VNINDEX": { name: "VNINDEX" },
+                "HNX": { name: "HNXINDEX" },
+                "HNXINDEX": { name: "HNXINDEX" },
+                "UPCOM": { name: "UPCOMINDEX" },
+                "UPCOMINDEX": { name: "UPCOMINDEX" },
                 "VN30": { name: "VN30" },
                 "HNX30": { name: "HNX30" },
                 "VS100": { name: "VS 100" },

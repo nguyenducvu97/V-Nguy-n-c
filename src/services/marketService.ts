@@ -140,26 +140,38 @@ class MarketDataStream {
     if (callback) this.onUpdateCallback = callback;
     this.subscribePending();
   }
+
+  public unsubscribe() {
+    if (this.socket) {
+      this.socket.close();
+      this.socket = null;
+    }
+    this.symbols.clear();
+    this.onUpdateCallback = null;
+    this.isConnecting = false;
+  }
 }
 
 // Singleton instance
 export const marketStream = new MarketDataStream();
 
 export async function fetchMarketIndexes(): Promise<MarketIndex[]> {
+  const symbols = "VNINDEX,HNX,UPCOM,VN30,HNX30,VS100,VSL-CAP,VSM-CAP,VSS-CAP,VN30F1M";
+  const url = `/api/market/quotes?symbols=${symbols}`;
+  
   try {
-    const symbols = "VNINDEX,HNX,UPCOM,VN30,HNX30,VS100,VSL-CAP,VSM-CAP,VSS-CAP,VN30F1M";
-    const response = await fetch(`/api/market/quotes?symbols=${symbols}`);
+    console.log(`[Market] Fetching indexes from: ${url}`);
+    const response = await fetch(url);
     const now = new Date().toLocaleTimeString('vi-VN');
     
-    // Robust response handling
     if (!response.ok) {
-        console.warn(`Market Index API returned status ${response.status}`);
+        console.warn(`[Market] Index API returned status ${response.status}`);
         return getFallbackIndexes();
     }
     
     const contentType = response.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
-        console.warn("Market Index API returned non-JSON content");
+        console.warn("[Market] Index API returned non-JSON content");
         return getFallbackIndexes();
     }
 
@@ -203,16 +215,16 @@ export async function fetchMarketIndexes(): Promise<MarketIndex[]> {
 function getFallbackIndexes(): MarketIndex[] {
     const now = new Date().toLocaleTimeString('vi-VN');
     return [
-      { symbol: "VNINDEX", value: 1921.60, change: -3.86, changePercent: "-0.2%", updatedAt: now, totalValue: 24500e9 },
-      { symbol: "HNX", value: 257.42, change: 2.35, changePercent: "+0.92%", updatedAt: now, totalValue: 2800e9 },
-      { symbol: "UPCOM", value: 126.40, change: 0.05, changePercent: "+0.04%", updatedAt: now, totalValue: 1650e9 },
-      { symbol: "VN30", value: 2050.58, change: -18.04, changePercent: "-0.87%", updatedAt: now, totalValue: 12500e9 },
+      { symbol: "VNINDEX", value: 1258.45, change: 12.45, changePercent: "+1.0%", updatedAt: now, totalValue: 18500e9 },
+      { symbol: "HNX", value: 235.34, change: 1.12, changePercent: "+0.48%", updatedAt: now, totalValue: 1500e9 },
+      { symbol: "UPCOM", value: 92.45, change: 0.65, changePercent: "+0.71%", updatedAt: now, totalValue: 800e9 },
+      { symbol: "VN30", value: 1282.10, change: 10.15, changePercent: "+0.8%", updatedAt: now, totalValue: 8500e9 },
       { symbol: "HNX30", value: 531.60, change: 1.22, changePercent: "+0.23%", updatedAt: now, totalValue: 1200e9 },
       { symbol: "VS100", value: 477.40, change: -1.16, changePercent: "-0.24%", updatedAt: now, totalValue: 0 },
       { symbol: "VSL-CAP", value: 685.34, change: -1.67, changePercent: "-0.24%", updatedAt: now, totalValue: 0 },
       { symbol: "VSM-CAP", value: 1296.21, change: 1.66, changePercent: "+0.13%", updatedAt: now, totalValue: 0 },
       { symbol: "VSS-CAP", value: 1896.52, change: 1.03, changePercent: "+0.05%", updatedAt: now, totalValue: 0 },
-      { symbol: "VN30F1M", value: 2053.90, change: -11.20, changePercent: "-0.54%", updatedAt: now, totalValue: 0 }
+      { symbol: "VN30F1M", value: 1285.90, change: 8.20, changePercent: "+0.64%", updatedAt: now, totalValue: 0 }
     ];
 }
 
@@ -268,18 +280,20 @@ export function formatNumber(value: number): string {
 }
 
 export async function fetchMultipleStockQuotes(symbols: string[]): Promise<StockPrice[]> {
+  const url = `/api/market/quotes?symbols=${symbols.join(",")}`;
   try {
-    const response = await fetch(`/api/market/quotes?symbols=${symbols.join(",")}`);
+    console.log(`[Market] Fetching multiple quotes from: ${url}`);
+    const response = await fetch(url);
     const now = new Date().toLocaleTimeString('vi-VN');
     
     if (!response.ok) {
-       console.warn(`Multiple Stocks API returned status ${response.status}`);
+       console.warn(`[Market] Multiple Stocks API returned status ${response.status}`);
        return [];
     }
     
     const contentType = response.headers.get("content-type");
     if (!contentType || !contentType.includes("application/json")) {
-        console.warn("Multiple Stocks API returned non-JSON content");
+        console.warn("[Market] Multiple Stocks API returned non-JSON content");
         return [];
     }
 
