@@ -6,6 +6,11 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { getMarketSentiment } from "@/lib/gemini";
 import { fetchMarketIndexes, fetchTopStocks, MarketIndex, formatNumber, formatCurrency } from "@/services/marketService";
 import { Skeleton } from "@/components/ui/skeleton";
+import { auth, db } from "@/lib/firebase";
+import { doc, getDoc, setDoc, updateDoc, arrayUnion } from "firebase/firestore";
+import { toast } from "sonner";
+import { handleFirestoreError, OperationType } from "@/lib/firestoreUtils";
+import { Plus } from "lucide-react";
 
 const chartData = [
   { time: "09:00", value: 1240 },
@@ -286,6 +291,32 @@ export function Dashboard() {
                   <Skeleton key={i} className="h-16 w-full rounded-xl bg-slate-800" />
                 )) : topStocks.map((stock, i) => {
                   const isUp = parseFloat(stock.changePercent) >= 0;
+                  
+                  const addToWatchlist = async (symbol: string) => {
+                    if (!auth.currentUser) {
+                      toast.error("Vui lòng đăng nhập để sử dụng tính năng này");
+                      return;
+                    }
+                    
+                    const watchlistRef = doc(db, "watchlists", auth.currentUser.uid);
+                    try {
+                      const docSnap = await getDoc(watchlistRef);
+                      if (docSnap.exists()) {
+                        await updateDoc(watchlistRef, {
+                          symbols: arrayUnion(symbol)
+                        });
+                      } else {
+                        await setDoc(watchlistRef, {
+                          userId: auth.currentUser.uid,
+                          symbols: [symbol]
+                        });
+                      }
+                      toast.success(`Đã thêm ${symbol} vào danh sách theo dõi`);
+                    } catch (error) {
+                      handleFirestoreError(error, OperationType.WRITE, "watchlists");
+                    }
+                  };
+
                   return (
                     <div key={i} className="flex items-center justify-between p-3 rounded-2xl hover:bg-slate-800/50 transition-all border border-transparent hover:border-slate-800 group">
                       <div className="flex items-center gap-3">
@@ -297,9 +328,18 @@ export function Dashboard() {
                             <p className="text-[10px] text-slate-500 uppercase tracking-tight">Real-time Quote</p>
                          </div>
                       </div>
-                      <div className="text-right">
-                         <p className="font-bold text-slate-200">{formatCurrency(stock.price)}</p>
-                         <p className={`text-xs font-medium ${isUp ? 'text-green-500' : 'text-red-500'}`}>{stock.changePercent}</p>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                           <p className="font-bold text-slate-200">{formatCurrency(stock.price)}</p>
+                           <p className={`text-xs font-medium ${isUp ? 'text-green-500' : 'text-red-500'}`}>{stock.changePercent}</p>
+                        </div>
+                        <button 
+                          onClick={() => addToWatchlist(stock.symbol)}
+                          className="opacity-0 group-hover:opacity-100 p-2 rounded-lg bg-blue-600/10 text-blue-400 hover:bg-blue-600 hover:text-white transition-all"
+                          title="Thêm vào danh sách theo dõi"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   );

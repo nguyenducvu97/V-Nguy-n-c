@@ -14,6 +14,7 @@ import { Dashboard } from "./components/dashboard/Dashboard";
 import { AIAnalysis } from "./components/analysis/AIAnalysis";
 import { Scanner } from "./components/scanner/Scanner";
 import { Portfolio } from "./components/portfolio/Portfolio";
+import { Watchlist } from "./components/watchlist/Watchlist";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -29,7 +30,7 @@ export default function App() {
       case "portfolio":
         return <Portfolio />;
       case "watchlist":
-        return <div className="flex items-center justify-center h-[60vh] text-slate-500 italic">Tính năng theo dõi đang phát triển...</div>;
+        return <Watchlist />;
       default:
         return <Dashboard />;
     }

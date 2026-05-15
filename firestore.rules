@@ -1,74 +1,94 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
+    // 0. Default deny
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // Common helpers
+    // --- Helpers ---
     function isSignedIn() {
       return request.auth != null;
     }
+    
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
+
     function isValidId(id) {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
-    function incoming() { return request.resource.data; }
-    function existing() { return resource.data; }
 
-    // Entity Validations
-    function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
-             data.keys().size() <= 6 &&
-             data.uid == request.auth.uid &&
-             data.email is string &&
-             data.email.size() < 256;
+    function incoming() {
+      return request.resource.data;
     }
-    
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Helpers ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email']) &&
+             data.uid == request.auth.uid &&
+             data.email is string && data.email.size() <= 256;
+    }
+
     function isValidWatchlist(data) {
       return data.keys().hasAll(['userId', 'symbols']) &&
              data.userId == request.auth.uid &&
-             data.symbols is list &&
-             data.symbols.size() <= 50;
-    }
-    
-    function isValidPortfolio(data) {
-      return data.keys().hasAll(['userId', 'name', 'createdAt']) &&
-             data.userId == request.auth.uid &&
-             data.name is string &&
-             data.name.size() > 0 && data.name.size() <= 100;
+             data.symbols is list && data.symbols.size() <= 100;
     }
 
-    // User profiles
+    function isValidPortfolio(data) {
+      return data.keys().hasAll(['userId', 'name']) &&
+             data.userId == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100;
+    }
+
+    function isValidPortfolioItem(data) {
+      return data.keys().hasAll(['portfolioId', 'symbol', 'quantity', 'averagePrice']) &&
+             data.symbol is string && data.symbol.size() > 0 && data.symbol.size() <= 10 &&
+             data.quantity is number && data.quantity >= 0 &&
+             data.averagePrice is number && data.averagePrice >= 0;
+    }
+
+    // --- Collection Matches ---
+
     match /users/{userId} {
-      allow read: if isOwner(userId);
+      allow get: if isOwner(userId);
       allow create: if isOwner(userId) && isValidUser(incoming());
       allow update: if isOwner(userId) && isValidUser(incoming()) && 
-                    incoming().uid == existing().uid &&
-                    incoming().createdAt == existing().createdAt;
+                    incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']);
     }
 
-    // Watchlists
     match /watchlists/{watchlistId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && isValidWatchlist(incoming());
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidWatchlist(incoming());
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidWatchlist(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidWatchlist(incoming()) &&
+                    incoming().userId == existing().userId;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
     }
 
-    // Portfolios
     match /portfolios/{portfolioId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && isValidPortfolio(incoming());
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && isValidPortfolio(incoming());
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && existing().userId == request.auth.uid;
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && isValidPortfolio(incoming());
+      allow update: if isSignedIn() && existing().userId == request.auth.uid && isValidPortfolio(incoming()) &&
+                    incoming().userId == existing().userId;
+      allow delete: if isSignedIn() && existing().userId == request.auth.uid;
 
       match /items/{itemId} {
         allow read: if isSignedIn() && get(/databases/$(database)/documents/portfolios/$(portfolioId)).data.userId == request.auth.uid;
-        allow write: if isSignedIn() && get(/databases/$(database)/documents/portfolios/$(portfolioId)).data.userId == request.auth.uid;
+        allow create: if isSignedIn() && 
+                      get(/databases/$(database)/documents/portfolios/$(portfolioId)).data.userId == request.auth.uid && 
+                      isValidPortfolioItem(incoming()) &&
+                      incoming().portfolioId == portfolioId;
+        allow update: if isSignedIn() && 
+                      get(/databases/$(database)/documents/portfolios/$(portfolioId)).data.userId == request.auth.uid && 
+                      isValidPortfolioItem(incoming()) &&
+                      incoming().portfolioId == existing().portfolioId;
+        allow delete: if isSignedIn() && get(/databases/$(database)/documents/portfolios/$(portfolioId)).data.userId == request.auth.uid;
       }
     }
   }
